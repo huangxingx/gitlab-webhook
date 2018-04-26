@@ -17,6 +17,7 @@ func setupRouter() *gin.Engine {
 	})
 
 	r.POST("/api/push_event", gitlab.PushHandler)
+	r.POST("/api/merge_request_event", gitlab.MergeRequestEventHandler)
 
 	return r
 

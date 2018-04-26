@@ -4,19 +4,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"fmt"
-	"encoding/json"
 	"time"
 	"strings"
-	"io/ioutil"
-)
-
-const (
-	DingdingBotUrl       = "https://oapi.dingtalk.com/robot/send"
-	AccessTokenCustomize = ""
-)
-
-const (
-	ContentTypeJson = "application/json"
+	"github.com/huangxingx/gitlab-webhook/src/dingding"
+	"encoding/json"
 )
 
 // gitlab 事件触发的参数
@@ -52,43 +43,10 @@ type notifyMsg struct {
 }
 
 // 生成通知消息内容
-func genContent(n notifyMsg) string {
+func (n *notifyMsg) GenContent() string {
 	content := fmt.Sprintf("event: %s\nuser: %s\nurl: %s\ntime: %s\nrepo: %s\ndescription: %s",
 		n.Event, n.UserName, n.Repository.Url, time.Now().String(), n.Repository.Url, n.Repository.Description)
 	return strings.Replace(content, "@", "\\@", -1)
-}
-
-type atUser struct {
-	AtMobiles []string `json:"atMobiles"`
-	IsAtAll   bool     `json:"isAtAll"`
-}
-
-type textReq struct {
-	Content string `json:"content"`
-}
-
-type notifyReq struct {
-	Msgtype string  `json:"msgtype"`
-	Text    textReq `json:"text"`
-	At      atUser  `json:"at"`
-}
-
-func (n notifyReq) String() []byte {
-	notifyMsg, e := json.Marshal(n)
-	if e != nil {
-		panic(e.Error())
-	}
-	return notifyMsg
-}
-
-func NewNotifyReq(content string, at atUser) *notifyReq {
-	return &notifyReq{
-		Msgtype: "text",
-		Text: textReq{
-			Content: content,
-		},
-		At: at,
-	}
 }
 
 func PushHandler(c *gin.Context) {
@@ -102,13 +60,9 @@ func PushHandler(c *gin.Context) {
 
 	// 叮叮自定义bot url
 	token := c.Param("token")
-	if token == "" {
-		token = AccessTokenCustomize
-	}
-	url := DingdingBotUrl + "?access_token=" + token
 
 	// 通知所有人
-	atUser := atUser{
+	atUser := dingding.AtUser{
 		IsAtAll: true,
 	}
 	msg := notifyMsg{
@@ -118,14 +72,13 @@ func PushHandler(c *gin.Context) {
 	}
 
 	// 生成通知内容
-	newMsg := genContent(msg)
-	body := NewNotifyReq(newMsg, atUser).String()
+	newMsg := msg.GenContent()
+	body := dingding.NewNotifyReq(newMsg, atUser)
+
 	// 发送通知内容
-	resp, _ := http.Post(url, ContentTypeJson, strings.NewReader(string(body)))
-	defer resp.Body.Close()
+	result, _ := dingding.SendNotifyToDingding(token, body)
+	var resultObj interface{}
+	json.Unmarshal(result, resultObj)
 
-	resBody, err := ioutil.ReadAll(resp.Body)
-	fmt.Println(string(resBody))
-
-	c.JSON(http.StatusOK, http.StatusText(http.StatusOK))
+	c.JSON(http.StatusOK, resultObj)
 }
